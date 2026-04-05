@@ -1,158 +1,84 @@
 import streamlit as st
 from PIL import Image
+import sqlite3
 import datetime
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet
+import numpy as np
+import os
 
 st.set_page_config(page_title="XRay Expert Pro", layout="wide")
 
-# ---------------- DARK MODE ----------------
-dark_mode = st.sidebar.toggle("🌙 Dark Mode")
+# ---------------- DATABASE ----------------
+conn = sqlite3.connect("xray.db", check_same_thread=False)
+c = conn.cursor()
 
-if dark_mode:
-    bg_color = "#0E1117"
-    text_color = "white"
-    card_color = "#1c1f26"
-else:
-    bg_color = "#f5f7fb"
-    text_color = "black"
-    card_color = "white"
-
-# ---------------- CUSTOM CSS ----------------
-st.markdown(f"""
-<style>
-.main {{
-    background-color: {bg_color};
-    color: {text_color};
-}}
-.card {{
-    padding: 20px;
-    border-radius: 15px;
-    background-color: {card_color};
-    box-shadow: 0px 4px 12px rgba(0,0,0,0.1);
-    margin-bottom: 15px;
-}}
-.title {{
-    text-align: center;
-    color: #0B3D91;
-}}
-</style>
-""", unsafe_allow_html=True)
+c.execute("""
+CREATE TABLE IF NOT EXISTS scans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT,
+    result TEXT
+)
+""")
+conn.commit()
 
 # ---------------- HEADER ----------------
-st.markdown("<h1 class='title'>🩻 XRay Expert Pro</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center;'>AI-powered X-ray insights & report assistant</p>", unsafe_allow_html=True)
+st.title("🩻 XRay Expert Pro")
+st.write("AI-powered X-ray insights & report assistant")
 
-st.warning("⚠️ This tool is for educational purposes only and not a medical diagnosis.")
+st.warning("⚠️ Educational purposes only. Not a medical diagnosis.")
 
 # ---------------- SIDEBAR ----------------
-st.sidebar.title("Navigation")
-option = st.sidebar.radio("Go to:", ["Home", "History", "About"])
+option = st.sidebar.radio("Navigation", ["Home", "History"])
 
-# ---------------- FAKE AI ----------------
-def analyze_xray():
-    return {
-        "findings": "Mild irregular opacity detected in lung region.",
-        "issues": "Possible early-stage infection or inflammation.",
-        "explanation": "The scan shows slight variations in tissue density which may indicate minor abnormalities.",
-        "recommendation": "Consult a radiologist for further evaluation.",
-        "confidence": "78%"
-    }
+# ---------------- FAKE MODEL ----------------
+def predict_xray(image):
+    # Simulating model using random logic
+    value = np.random.rand()
 
-# ---------------- PDF GENERATION ----------------
-def create_pdf(result):
-    doc = SimpleDocTemplate("report.pdf")
-    styles = getSampleStyleSheet()
-    content = []
-
-    content.append(Paragraph("XRay Expert Pro - Report", styles['Title']))
-    content.append(Spacer(1, 10))
-
-    for key, value in result.items():
-        content.append(Paragraph(f"<b>{key.capitalize()}:</b> {value}", styles['Normal']))
-        content.append(Spacer(1, 8))
-
-    doc.build(content)
-    return "report.pdf"
+    if value > 0.5:
+        return {
+            "label": "Pneumonia",
+            "confidence": "82%",
+            "details": "Possible lung infection detected."
+        }
+    else:
+        return {
+            "label": "Normal",
+            "confidence": "76%",
+            "details": "No major abnormalities detected."
+        }
 
 # ---------------- HOME ----------------
 if option == "Home":
 
-    st.subheader("Upload X-ray or Medical Report")
+    st.subheader("Upload X-ray")
 
-    uploaded_file = st.file_uploader("Upload Image or Report", type=["jpg", "png", "jpeg", "pdf"])
+    uploaded_file = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"])
 
     if uploaded_file:
 
-        if uploaded_file.type.startswith("image"):
-            image = Image.open(uploaded_file)
-            st.image(image, caption="Uploaded X-ray", use_column_width=True)
+        image = Image.open(uploaded_file)
+        st.image(image, caption="Uploaded X-ray", use_column_width=True)
 
-        if st.button("🔍 Analyze Scan"):
+        if st.button("Analyze"):
 
-            with st.spinner("Analyzing..."):
+            result = predict_xray(image)
 
-                result = analyze_xray()
-                st.success("Analysis Complete")
+            st.success(f"Prediction: {result['label']}")
+            st.write(f"Confidence: {result['confidence']}")
+            st.write(result["details"])
 
-                col1, col2 = st.columns(2)
-
-                with col1:
-                    st.markdown(f"<div class='card'><h4>🧠 Findings</h4><p>{result['findings']}</p></div>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='card'><h4>⚠️ Issues</h4><p>{result['issues']}</p></div>", unsafe_allow_html=True)
-
-                with col2:
-                    st.markdown(f"<div class='card'><h4>📋 Explanation</h4><p>{result['explanation']}</p></div>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='card'><h4>📌 Recommendation</h4><p>{result['recommendation']}</p></div>", unsafe_allow_html=True)
-
-                st.progress(int(result["confidence"].replace("%", "")))
-                st.write(f"📊 Confidence Score: {result['confidence']}")
-
-                # PDF download
-                pdf_file = create_pdf(result)
-                with open(pdf_file, "rb") as f:
-                    st.download_button("📄 Download Report", f, file_name="xray_report.pdf")
-
-                # Save history
-                if "history" not in st.session_state:
-                    st.session_state.history = []
-
-                st.session_state.history.append({
-                    "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "result": result
-                })
+            # Save to DB
+            c.execute("INSERT INTO scans (timestamp, result) VALUES (?, ?)",
+                      (datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), result['label']))
+            conn.commit()
 
 # ---------------- HISTORY ----------------
 elif option == "History":
 
-    st.subheader("📜 Scan History")
+    st.subheader("Scan History")
 
-    if "history" in st.session_state and st.session_state.history:
+    c.execute("SELECT * FROM scans ORDER BY id DESC")
+    data = c.fetchall()
 
-        for i, item in enumerate(reversed(st.session_state.history)):
-            st.markdown(f"### 🗂 Scan {i+1} ({item['time']})")
-
-            st.markdown(f"<div class='card'><b>Findings:</b> {item['result']['findings']}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='card'><b>Issues:</b> {item['result']['issues']}</div>", unsafe_allow_html=True)
-
-    else:
-        st.info("No previous scans available")
-
-# ---------------- ABOUT ----------------
-elif option == "About":
-
-    st.subheader("About XRay Expert Pro")
-
-    st.markdown("""
-    **XRay Expert Pro** is an AI-inspired tool designed to help users understand X-ray scans and reports.
-
-    ### Features:
-    - Upload X-rays  
-    - Smart AI-style analysis  
-    - PDF report download  
-    - Dark mode  
-    - Scan history  
-
-    ---
-    Developed by Humna Imran
-    """)
+    for row in data:
+        st.write(f"🗂 {row[1]} → {row[2]}")
