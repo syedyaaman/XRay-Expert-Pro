@@ -8,7 +8,7 @@ st.set_page_config(page_title="XRay Expert Pro", layout="wide")
 
 # ---------------- API KEY ----------------
 # Put your OpenAI API key in Streamlit secrets
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+openai.api_key = st.secrets["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"]
 
 # ---------------- HEADER ----------------
 st.markdown("""
