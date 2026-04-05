@@ -1,4 +1,3 @@
 streamlit
 pillow
-pytesseract
-numpy
+openai
